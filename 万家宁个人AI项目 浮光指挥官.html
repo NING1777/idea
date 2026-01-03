@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI 粒子指挥官 - 实时交互增强版</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 180px;
+            height: 135px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            transform: scaleX(-1);
+            z-index: 100;
+            overflow: hidden;
+        }
+
+        #webcam-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #hud {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            z-index: 101;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+        }
+
+        #status {
+            font-size: 18px;
+            color: #fff;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #fff;
+        }
+
+        .progress-bg {
+            width: 200px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #fff;
+            box-shadow: 0 0 10px #fff;
+            transition: width 0.1s;
+        }
+
+        .gesture-item {
+            font-size: 14px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 200px;
+        }
+
+        .control-hint {
+            font-size: 11px;
+            color: #aaa;
+            margin-top: 15px;
+            border-top: 1px solid #333;
+            padding-top: 10px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="hud">
+        <div id="status">系统初始化...</div>
+        <div class="progress-bg">
+            <div id="progress-bar"></div>
+        </div>
+        <div style="margin-top:15px;">
+            <div class="gesture-item"><span>✊ 握拳 (1s)</span> <span style="color:#00f2fe">能量球</span></div>
+            <div class="gesture-item"><span>🖐️🖐️ 双手 (1s)</span> <span style="color:#ffb6c1">粉红小猪</span></div>
+            <div class="gesture-item"><span>👌 OK (1s)</span> <span style="color:#ead6b8">土星</span></div>
+            <div class="gesture-item"><span>❤️ 比心 (1s)</span> <span style="color:#ff0055">立体爱心</span></div>
+        </div>
+        <div class="control-hint">
+            ✨ 伸出食指：拨动/排斥粒子<br>
+            ✨ 捏合拇指食指：实时缩放图形
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="video-container"><video id="webcam-video" autoplay playsinline></video></div>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "gsap": "https://cdn.skypack.dev/gsap"
+    }}
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import gsap from 'gsap';
+
+        const PARTICLE_COUNT = 15000;
+        let scene, camera, renderer, composer, particles;
+        let shapes = {}, themes = {};
+        let currentShape = 'sphere';
+        let baseScale = 1.0;
+        let lastDetectedGesture = null;
+        let gestureStartTime = 0;
+        const HOLD_TIME = 1000; // 优化1：缩短至1秒
+
+        // 交互变量
+        let fingerPos = new THREE.Vector3(-100, -100, 0);
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 15;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.6, 0.4, 0.1));
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PARTICLE_COUNT * 3), 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(PARTICLE_COUNT * 3), 3));
+            particles = new THREE.Points(geo, new THREE.PointsMaterial({
+                size: 0.04,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                depthWrite: false
+            }));
+            scene.add(particles);
+
+            createShapeData();
+            setupAI();
+            animate();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createShapeData() {
+            const pos = () => new Float32Array(PARTICLE_COUNT * 3);
+            shapes.sphere = pos(); shapes.cat = pos(); shapes.saturn = pos(); shapes.heart = pos();
+
+            themes.sphere = [0x00f2fe, 0x4facfe];
+            themes.cat = [0xffb6c1, 0xff69b4, 0xffc0cb];
+            themes.saturn = [0xead6b8, 0xc5ab6e, 0xfff4e0];
+            themes.heart = [0xff0044, 0xff5588];
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const idx = i * 3;
+                const u = Math.random() * Math.PI * 2, v = Math.acos(2 * Math.random() - 1);
+
+                // --- 1. 球体 ---
+                const r = 5 * Math.cbrt(Math.random());
+                shapes.sphere[idx] = r * Math.sin(v) * Math.cos(u);
+                shapes.sphere[idx + 1] = r * Math.sin(v) * Math.sin(u);
+                shapes.sphere[idx + 2] = r * Math.cos(v);
+
+                // --- 2. 土星 ---
+                if (i < PARTICLE_COUNT * 0.6) {
+                    const sr = 3.5 * Math.cbrt(Math.random());
+                    shapes.saturn[idx] = sr * Math.sin(v) * Math.cos(u);
+                    shapes.saturn[idx + 1] = sr * Math.sin(v) * Math.sin(u);
+                    shapes.saturn[idx + 2] = sr * Math.cos(v);
+                } else {
+                    const ang = Math.random() * Math.PI * 2, rr = 4.5 + Math.random() * 2.5;
+                    shapes.saturn[idx] = Math.cos(ang) * rr;
+                    shapes.saturn[idx + 1] = (Math.random() - 0.5) * 0.2 + Math.sin(ang) * 0.4;
+                    shapes.saturn[idx + 2] = Math.sin(ang) * rr;
+                }
+
+                // --- 3. 粉红小猪 ---
+                let cx, cy, cz;
+                if (i < PARTICLE_COUNT * 0.7) {
+                    const r = 4.5 * Math.cbrt(Math.random());
+                    cx = r * Math.sin(v) * Math.cos(u) * 1.1;
+                    cy = r * Math.sin(v) * Math.sin(u) * 0.95;
+                    cz = r * Math.cos(v);
+                } else if (i < PARTICLE_COUNT * 0.85) {
+                    const a = Math.random() * Math.PI * 2, h = Math.random();
+                    cx = 1.4 * Math.cos(a); cy = -0.5 + 1.0 * Math.sin(a); cz = 3.5 + h * 0.8;
+                } else if (i < PARTICLE_COUNT * 0.90) {
+                    const side = i % 2 === 0 ? 1 : -1, a = Math.random() * Math.PI * 2, rN = 0.25 * Math.sqrt(Math.random());
+                    cx = side * 0.5 + rN * Math.cos(a); cy = -0.5 + rN * Math.sin(a); cz = 4.4;
+                } else if (i < PARTICLE_COUNT * 0.96) {
+                    const side = i % 2 === 0 ? 1 : -1, uh = Math.random(), va = Math.random() * Math.PI;
+                    const bR = 1.0 * (1 - uh), eH = uh * 2.2;
+                    let ex = bR * Math.cos(va), ey = eH, ez = bR * Math.sin(va) * 0.5;
+                    const tilt = 0.4 * side, cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+                    cx = side * 2.2 + (ex * cosT - ey * sinT); cy = 3.2 + (ex * sinT + ey * cosT); cz = 0.8 + ez;
+                } else {
+                    const side = i % 2 === 0 ? 1 : -1, a = Math.random() * Math.PI * 2, rE = 0.25 * Math.sqrt(Math.random());
+                    cx = side * 1.6 + rE * Math.cos(a); cy = 1.2 + rE * Math.sin(a); cz = 3.0;
+                }
+                shapes.cat[idx] = cx; shapes.cat[idx + 1] = cy; shapes.cat[idx + 2] = cz;
+            }
+
+            // --- 4. 爱心 ---
+            let c = 0;
+            while (c < PARTICLE_COUNT) {
+                const x = (Math.random() - 0.5) * 3.5, y = (Math.random() - 0.5) * 3.5, z = (Math.random() - 0.5) * 3.5;
+                if (Math.pow(x * x + (9 / 4) * z * z + y * y - 1, 3) - x * x * y * y * y - (9 / 80) * z * z * y * y * y < 0) {
+                    const idx = c * 3;
+                    shapes.heart[idx] = x * 3.2; shapes.heart[idx + 1] = y * 3.2 + 1.2; shapes.heart[idx + 2] = z * 3.2;
+                    c++;
+                }
+            }
+            transitionTo('sphere', true);
+        }
+
+        function setupAI() {
+            const video = document.getElementById('webcam-video');
+            const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+
+            hands.onResults(results => {
+                const lms = results.multiHandLandmarks;
+                let detected = null;
+
+                if (lms && lms.length > 0) {
+                    const h0 = lms[0];
+
+                    // 优化2：手部拨动坐标映射 (MediaPipe 0~1 映射到 Three.js 世界坐标)
+                    // 考虑镜像：h0.x 是 0(右)到 1(左)，我们需要转换
+                    fingerPos.set(
+                        (0.5 - h0[8].x) * 28,
+                        (0.5 - h0[8].y) * 18,
+                        2
+                    );
+
+                    // 缩放逻辑
+                    const pinch = Math.hypot(h0[8].x - h0[4].x, h0[8].y - h0[4].y);
+                    baseScale = THREE.MathUtils.mapLinear(pinch, 0.03, 0.3, 0.5, 3.0);
+
+                    if (lms.length === 1) {
+                        const isFist = h0[8].y > h0[6].y && h0[12].y > h0[10].y && h0[16].y > h0[14].y;
+                        const okDist = Math.hypot(h0[8].x - h0[4].x, h0[8].y - h0[4].y);
+                        if (isFist) detected = 'sphere';
+                        else if (okDist < 0.05 && h0[12].y < h0[10].y) detected = 'saturn';
+                    } else if (lms.length === 2) {
+                        const h1 = lms[1];
+                        const open0 = h0[8].y < h0[6].y && h0[12].y < h0[10].y;
+                        const open1 = h1[8].y < h1[6].y && h1[12].y < h1[10].y;
+                        const hDist = Math.hypot(h0[4].x - h1[4].x, h0[4].y - h1[4].y);
+                        if (hDist < 0.08) detected = 'heart';
+                        else if (open0 && open1) detected = 'cat';
+                    }
+                } else {
+                    fingerPos.set(-100, -100, 0); // 手不在画面时移走干扰点
+                }
+
+                // 进度条与切换逻辑
+                const bar = document.getElementById('progress-bar');
+                if (detected && detected !== currentShape) {
+                    if (detected === lastDetectedGesture) {
+                        const elapsed = Date.now() - gestureStartTime;
+                        bar.style.width = Math.min(100, (elapsed / HOLD_TIME * 100)) + "%";
+                        if (elapsed > HOLD_TIME) { transitionTo(detected); gestureStartTime = 0; }
+                    } else { lastDetectedGesture = detected; gestureStartTime = Date.now(); }
+                } else {
+                    lastDetectedGesture = null;
+                    gestureStartTime = 0;
+                    bar.style.width = "0%";
+                }
+
+                let displayShapeName = currentShape === 'cat' ? 'PINK PIG' : currentShape.toUpperCase();
+                let displayDetectedName = detected ? (detected === 'cat' ? 'PINK PIG' : detected.toUpperCase()) : '';
+                document.getElementById('status').innerText = detected ? `锁定中: ${displayDetectedName}` : `形态: ${displayShapeName}`;
+            });
+
+            new Camera(video, { onFrame: async () => await hands.send({ image: video }), width: 640, height: 480 }).start();
+        }
+
+        function transitionTo(type, instant = false) {
+            currentShape = type;
+            const colors = themes[type];
+            const colAttr = particles.geometry.attributes.color;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const c = new THREE.Color(colors[i % colors.length]);
+                gsap.to(colAttr.array, {
+                    [i * 3]: c.r, [i * 3 + 1]: c.g, [i * 3 + 2]: c.b,
+                    duration: instant ? 0 : 0.8,
+                    onUpdate: () => colAttr.needsUpdate = true
+                });
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const posArr = particles.geometry.attributes.position.array;
+            const target = shapes[currentShape];
+            const t = Date.now() * 0.002;
+            const beat = (currentShape === 'heart') ? (1 + Math.pow(Math.sin(t * 2.5), 10) * 0.2) : 1;
+            const scale = baseScale * beat;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const idx = i * 3;
+
+                // 1. 基础形状趋向力
+                let tx = target[idx] * scale;
+                let ty = target[idx + 1] * scale;
+                let tz = target[idx + 2] * scale;
+
+                // 2. 交互排斥力计算
+                const dx = posArr[idx] - fingerPos.x;
+                const dy = posArr[idx + 1] - fingerPos.y;
+                const dz = posArr[idx + 2] - fingerPos.z;
+                const distSq = dx * dx + dy * dy + dz * dz;
+
+                if (distSq < 15) { // 排斥半径
+                    const force = (15 - distSq) * 0.06;
+                    tx += (dx / Math.sqrt(distSq + 0.1)) * force * 12;
+                    ty += (dy / Math.sqrt(distSq + 0.1)) * force * 12;
+                }
+
+                // 3. 应用平滑插值位移
+                posArr[idx] += (tx - posArr[idx]) * 0.15;
+                posArr[idx + 1] += (ty - posArr[idx + 1]) * 0.15;
+                posArr[idx + 2] += (tz - posArr[idx + 2]) * 0.15;
+            }
+
+            if (currentShape === 'saturn') particles.rotation.y += 0.006;
+            else particles.rotation.y *= 0.95;
+
+            particles.geometry.attributes.position.needsUpdate = true;
+            composer.render();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+
+</html>
