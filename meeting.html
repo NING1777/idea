@@ -85,15 +85,7 @@
             display: inline-block;
         }
 
-        .app-subtitle {
-            font-size: 0.9rem;
-            letter-spacing: 6px;
-            margin-bottom: 40px;
-            font-family: sans-serif;
-            text-transform: uppercase;
-            opacity: 0.9;
-            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-        }
+        /* 原副标题已删除 */
 
         .quote-text {
             font-size: 1.1rem;
@@ -575,30 +567,37 @@
                 transform: scale(1);
             }
         }
-    </style>
-    /* ================= 移动端终极适配 (强制生效) ================= */
+
+        /* ================= 移动端终极适配 (强制生效) ================= */
         @media screen and (max-width: 768px) {
-            
+
             /* 1. 容器调整：改为网格布局，并允许内部滚动 */
             .soul-gallery {
-                display: grid !important; /* 强制网格，比Flex更稳 */
-                grid-template-columns: repeat(2, 1fr); /* 强制两列，平分宽度 */
+                display: grid !important;
+                /* 强制网格，比Flex更稳 */
+                grid-template-columns: repeat(2, 1fr);
+                /* 强制两列，平分宽度 */
                 gap: 10px !important;
-                width: 94% !important; /* 宽度撑开 */
-                
+                width: 94% !important;
+                /* 宽度撑开 */
+
                 /* 关键：限制高度，放不下就滚动 */
-                max-height: 50vh; 
+                max-height: 50vh;
                 overflow-y: auto;
-                align-content: start; /* 内容从上对齐 */
+                align-content: start;
+                /* 内容从上对齐 */
                 padding: 5px;
             }
 
             /* 2. 这里的代码把卡片变得很扁很小 */
             .soul-card {
-                width: 100% !important; /* 自动填满格子 */
-                height: 140px !important; /* 高度强行压扁到140px */
+                width: 100% !important;
+                /* 自动填满格子 */
+                height: 140px !important;
+                /* 高度强行压扁到140px */
                 border-radius: 12px !important;
-                margin: 0 !important; /* 去掉干扰的外边距 */
+                margin: 0 !important;
+                /* 去掉干扰的外边距 */
             }
 
             /* 3. 极度缩小图标圆圈 */
@@ -606,7 +605,7 @@
                 width: 40px !important;
                 height: 40px !important;
                 margin-bottom: 6px !important;
-                background: rgba(255,251,240, 0.8) !important;
+                background: rgba(255, 251, 240, 0.8) !important;
             }
 
             .soul-svg {
@@ -623,9 +622,11 @@
             .soul-desc {
                 font-size: 0.6rem !important;
                 opacity: 0.7;
-                white-space: nowrap; /* 强制文字不换行 */
+                white-space: nowrap;
+                /* 强制文字不换行 */
                 overflow: hidden;
-                text-overflow: ellipsis; /* 太长显示省略号 */
+                text-overflow: ellipsis;
+                /* 太长显示省略号 */
                 max-width: 90%;
             }
 
@@ -634,28 +635,39 @@
                 margin-bottom: 15px !important;
                 margin-top: 10px !important;
             }
-            .gallery-title { font-size: 1.4rem !important; }
-            .gallery-subtitle { display: none; } /* 手机上隐藏副标题省空间 */
+
+            .gallery-title {
+                font-size: 1.4rem !important;
+            }
+
+            .gallery-subtitle {
+                display: none;
+            }
+
+            /* 手机上隐藏副标题省空间 */
 
             /* 6. 缩小底部输入框区域 */
             .input-wrapper.show {
                 height: 45px !important;
                 margin-top: 10px !important;
             }
+
             .custom-inputs {
                 padding: 0 15px !important;
                 height: 40px;
                 align-items: center;
             }
+
             .custom-inputs input {
                 width: 60px !important;
                 font-size: 0.75rem !important;
             }
+
             .custom-hint {
                 bottom: 70px !important;
                 font-size: 0.6rem !important;
             }
-            
+
             /* 7. 调整确认按钮位置 */
             .confirm-btn {
                 margin-top: 20px !important;
@@ -663,6 +675,7 @@
                 font-size: 0.9rem !important;
             }
         }
+    </style>
 </head>
 
 <body>
