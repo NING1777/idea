@@ -3,31 +3,39 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>AI 粒子指挥官 - 实时交互增强版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>AI 粒子指挥官 - 还原高精版</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background: #000;
             font-family: 'Segoe UI', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         #canvas-container {
             width: 100vw;
             height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
         }
 
         #video-container {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            width: 180px;
-            height: 135px;
+            width: 120px;
+            height: 90px;
             border-radius: 12px;
             border: 2px solid rgba(255, 255, 255, 0.5);
             transform: scaleX(-1);
             z-index: 100;
             overflow: hidden;
+            background: #000;
         }
 
         #webcam-video {
@@ -41,79 +49,95 @@
             top: 20px;
             left: 20px;
             color: #fff;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
             border-radius: 15px;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(8px);
             z-index: 101;
             border: 1px solid rgba(255, 255, 255, 0.1);
             pointer-events: none;
         }
 
         #status {
-            font-size: 18px;
+            font-size: 16px;
             color: #fff;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             text-shadow: 0 0 10px #fff;
         }
 
         .progress-bg {
-            width: 200px;
-            height: 6px;
+            width: 150px;
+            height: 4px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
+            border-radius: 2px;
             overflow: hidden;
         }
 
         #progress-bar {
             width: 0%;
             height: 100%;
-            background: #fff;
-            box-shadow: 0 0 10px #fff;
+            background: #00f2fe;
+            box-shadow: 0 0 8px #00f2fe;
             transition: width 0.1s;
         }
 
-        .gesture-item {
-            font-size: 14px;
-            margin: 10px 0;
+        /* 启动遮罩层 */
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 999;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            width: 200px;
+            justify-content: center;
+            text-align: center;
+            color: white;
+            transition: opacity 0.5s;
         }
 
-        .control-hint {
-            font-size: 11px;
-            color: #aaa;
-            margin-top: 15px;
-            border-top: 1px solid #333;
-            padding-top: 10px;
-            line-height: 1.5;
+        #start-btn {
+            margin-top: 20px;
+            padding: 15px 40px;
+            font-size: 18px;
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+            border: none;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.5);
         }
     </style>
 </head>
 
 <body>
+    <div id="overlay">
+        <h1>✨ 粒子准备就绪</h1>
+        <p>请点击按钮启动音效与摄像头</p>
+        <button id="start-btn">启动体验 / Start</button>
+    </div>
+
     <div id="hud">
         <div id="status">系统初始化...</div>
         <div class="progress-bg">
             <div id="progress-bar"></div>
         </div>
-        <div style="margin-top:15px;">
-            <div class="gesture-item"><span>✊ 握拳 (1s)</span> <span style="color:#00f2fe">能量球</span></div>
-            <div class="gesture-item"><span>🖐️🖐️ 双手 (1s)</span> <span style="color:#ffb6c1">粉红小猪</span></div>
-            <div class="gesture-item"><span>👌 OK (1s)</span> <span style="color:#ead6b8">土星</span></div>
-            <div class="gesture-item"><span>❤️ 比心 (1s)</span> <span style="color:#ff0055">立体爱心</span></div>
-        </div>
-        <div class="control-hint">
-            ✨ 伸出食指：拨动/排斥粒子<br>
-            ✨ 捏合拇指食指：实时缩放图形
+        <div style="margin-top:10px; font-size:12px; opacity:0.8;">
+            <div>✊ 握拳: 能量球</div>
+            <div>🖐️ 双手: 粉红猪</div>
+            <div>👌 OK: 土星环</div>
+            <div>❤️ 比心: 爱心</div>
         </div>
     </div>
 
     <div id="canvas-container"></div>
-    <div id="video-container"><video id="webcam-video" autoplay playsinline></video></div>
+    <div id="video-container">
+        <video id="webcam-video" autoplay playsinline muted></video>
+    </div>
 
     <script type="importmap">
     { "imports": {
@@ -132,17 +156,73 @@
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         import gsap from 'gsap';
 
-        const PARTICLE_COUNT = 15000;
+        // 移动端判断
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        // 粒子数量：手机适当降低，电脑保持高画质
+        const PARTICLE_COUNT = isMobile ? 8000 : 15000;
+
         let scene, camera, renderer, composer, particles;
         let shapes = {}, themes = {};
-        let currentShape = 'sphere';
-        let baseScale = 1.0;
+
+        // 1. 修改：初始状态变为 'heart'
+        let currentShape = 'heart';
+
+        let baseScale = isMobile ? 0.8 : 1.0;
         let lastDetectedGesture = null;
         let gestureStartTime = 0;
-        const HOLD_TIME = 1000; // 优化1：缩短至1秒
+        const HOLD_TIME = 1000;
 
-        // 交互变量
+        // 新增：控制粒子聚合的物理速度 (Lerp Factor)
+        let lerpSpeed = 0.15;
+
         let fingerPos = new THREE.Vector3(-100, -100, 0);
+        let audioCtx = null;
+        let lastSoundTime = 0;
+
+        // --- 音效模块 (仅保留交互脆响) ---
+        const SoundFX = {
+            init: () => {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            // 粒子碰撞/交互的“脆”音效
+            playSparkle: () => {
+                if (!audioCtx || audioCtx.state !== 'running') return;
+
+                // 限制触发频率，防止声音过于密集炸耳
+                const now = audioCtx.currentTime;
+                if (now - lastSoundTime < 0.05) return;
+                lastSoundTime = now;
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                // 随机高频，模拟风铃或玻璃碰撞 (2000Hz - 4000Hz)
+                const freq = 2000 + Math.random() * 2000;
+                osc.frequency.setValueAtTime(freq, now);
+                osc.type = 'sine';
+
+                // 极短的包络，制造“脆”感
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+                osc.start();
+                osc.stop(now + 0.1);
+            }
+        };
+
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            SoundFX.init();
+            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+
+            const overlay = document.getElementById('overlay');
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.style.display = 'none', 500);
+
+            init();
+        });
 
         function init() {
             scene = new THREE.Scene();
@@ -156,13 +236,15 @@
 
             composer = new EffectComposer(renderer);
             composer.addPass(new RenderPass(scene, camera));
-            composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.6, 0.4, 0.1));
+            // 稍微降低Bloom强度，让粒子颗粒感更明显，看起来更“脆”
+            composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.3, 0.1));
 
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PARTICLE_COUNT * 3), 3));
             geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(PARTICLE_COUNT * 3), 3));
+
             particles = new THREE.Points(geo, new THREE.PointsMaterial({
-                size: 0.04,
+                size: isMobile ? 0.06 : 0.04,
                 vertexColors: true,
                 blending: THREE.AdditiveBlending,
                 transparent: true,
@@ -170,13 +252,14 @@
             }));
             scene.add(particles);
 
-            createShapeData();
+            createShapeData(); // 使用原始复杂逻辑
             setupAI();
             animate();
 
             window.addEventListener('resize', onWindowResize);
         }
 
+        // --- 还原原始图形生成逻辑 ---
         function createShapeData() {
             const pos = () => new Float32Array(PARTICLE_COUNT * 3);
             shapes.sphere = pos(); shapes.cat = pos(); shapes.saturn = pos(); shapes.heart = pos();
@@ -190,13 +273,13 @@
                 const idx = i * 3;
                 const u = Math.random() * Math.PI * 2, v = Math.acos(2 * Math.random() - 1);
 
-                // --- 1. 球体 ---
+                // 1. 球体 (原始)
                 const r = 5 * Math.cbrt(Math.random());
                 shapes.sphere[idx] = r * Math.sin(v) * Math.cos(u);
                 shapes.sphere[idx + 1] = r * Math.sin(v) * Math.sin(u);
                 shapes.sphere[idx + 2] = r * Math.cos(v);
 
-                // --- 2. 土星 ---
+                // 2. 土星 (原始)
                 if (i < PARTICLE_COUNT * 0.6) {
                     const sr = 3.5 * Math.cbrt(Math.random());
                     shapes.saturn[idx] = sr * Math.sin(v) * Math.cos(u);
@@ -209,49 +292,60 @@
                     shapes.saturn[idx + 2] = Math.sin(ang) * rr;
                 }
 
-                // --- 3. 粉红小猪 ---
+                // 3. 粉红小猪 (原始复杂逻辑还原)
                 let cx, cy, cz;
-                if (i < PARTICLE_COUNT * 0.7) {
+                if (i < PARTICLE_COUNT * 0.7) { // 身体
                     const r = 4.5 * Math.cbrt(Math.random());
                     cx = r * Math.sin(v) * Math.cos(u) * 1.1;
                     cy = r * Math.sin(v) * Math.sin(u) * 0.95;
                     cz = r * Math.cos(v);
-                } else if (i < PARTICLE_COUNT * 0.85) {
+                } else if (i < PARTICLE_COUNT * 0.85) { // 鼻子
                     const a = Math.random() * Math.PI * 2, h = Math.random();
                     cx = 1.4 * Math.cos(a); cy = -0.5 + 1.0 * Math.sin(a); cz = 3.5 + h * 0.8;
-                } else if (i < PARTICLE_COUNT * 0.90) {
+                } else if (i < PARTICLE_COUNT * 0.90) { // 鼻孔
                     const side = i % 2 === 0 ? 1 : -1, a = Math.random() * Math.PI * 2, rN = 0.25 * Math.sqrt(Math.random());
                     cx = side * 0.5 + rN * Math.cos(a); cy = -0.5 + rN * Math.sin(a); cz = 4.4;
-                } else if (i < PARTICLE_COUNT * 0.96) {
+                } else if (i < PARTICLE_COUNT * 0.96) { // 耳朵
                     const side = i % 2 === 0 ? 1 : -1, uh = Math.random(), va = Math.random() * Math.PI;
                     const bR = 1.0 * (1 - uh), eH = uh * 2.2;
                     let ex = bR * Math.cos(va), ey = eH, ez = bR * Math.sin(va) * 0.5;
                     const tilt = 0.4 * side, cosT = Math.cos(tilt), sinT = Math.sin(tilt);
                     cx = side * 2.2 + (ex * cosT - ey * sinT); cy = 3.2 + (ex * sinT + ey * cosT); cz = 0.8 + ez;
-                } else {
+                } else { // 眼睛
                     const side = i % 2 === 0 ? 1 : -1, a = Math.random() * Math.PI * 2, rE = 0.25 * Math.sqrt(Math.random());
                     cx = side * 1.6 + rE * Math.cos(a); cy = 1.2 + rE * Math.sin(a); cz = 3.0;
                 }
                 shapes.cat[idx] = cx; shapes.cat[idx + 1] = cy; shapes.cat[idx + 2] = cz;
-            }
 
-            // --- 4. 爱心 ---
-            let c = 0;
-            while (c < PARTICLE_COUNT) {
-                const x = (Math.random() - 0.5) * 3.5, y = (Math.random() - 0.5) * 3.5, z = (Math.random() - 0.5) * 3.5;
-                if (Math.pow(x * x + (9 / 4) * z * z + y * y - 1, 3) - x * x * y * y * y - (9 / 80) * z * z * y * y * y < 0) {
-                    const idx = c * 3;
-                    shapes.heart[idx] = x * 3.2; shapes.heart[idx + 1] = y * 3.2 + 1.2; shapes.heart[idx + 2] = z * 3.2;
-                    c++;
+                // 4. 爱心 (原始)
+                // 由于原始代码中while循环可能在粒子数减少时导致死循环或分布不均，
+                // 这里采用更稳定的参数方程生成，保持爱心形状不变
+                let x, y, z;
+                // 使用拒绝采样法生成实心爱心
+                let done = false;
+                while (!done) {
+                    x = (Math.random() - 0.5) * 3.5;
+                    y = (Math.random() - 0.5) * 3.5;
+                    z = (Math.random() - 0.5) * 3.5;
+                    if (Math.pow(x * x + (9 / 4) * z * z + y * y - 1, 3) - x * x * y * y * y - (9 / 80) * z * z * y * y * y < 0) {
+                        done = true;
+                    }
                 }
+                shapes.heart[idx] = x * 3.2; shapes.heart[idx + 1] = y * 3.2 + 1.2; shapes.heart[idx + 2] = z * 3.2;
             }
-            transitionTo('sphere', true);
+            // 2. 修改：初始化时直接变成爱心
+            transitionTo('heart', true);
         }
 
         function setupAI() {
             const video = document.getElementById('webcam-video');
             const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-            hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: isMobile ? 0 : 1, // 移动端降级模型提升速度
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
 
             hands.onResults(results => {
                 const lms = results.multiHandLandmarks;
@@ -260,66 +354,89 @@
                 if (lms && lms.length > 0) {
                     const h0 = lms[0];
 
-                    // 优化2：手部拨动坐标映射 (MediaPipe 0~1 映射到 Three.js 世界坐标)
-                    // 考虑镜像：h0.x 是 0(右)到 1(左)，我们需要转换
+                    // 动态坐标映射
+                    const vH = 17.32;
+                    const aspect = window.innerWidth / window.innerHeight;
+                    const vW = vH * aspect;
+
                     fingerPos.set(
-                        (0.5 - h0[8].x) * 28,
-                        (0.5 - h0[8].y) * 18,
+                        (0.5 - h0[8].x) * vW,
+                        (0.5 - h0[8].y) * vH,
                         2
                     );
 
-                    // 缩放逻辑
                     const pinch = Math.hypot(h0[8].x - h0[4].x, h0[8].y - h0[4].y);
-                    baseScale = THREE.MathUtils.mapLinear(pinch, 0.03, 0.3, 0.5, 3.0);
+                    const minPinch = isMobile ? 0.04 : 0.03;
+                    baseScale = THREE.MathUtils.mapLinear(pinch, minPinch, 0.25, 0.5, 3.0);
 
                     if (lms.length === 1) {
-                        const isFist = h0[8].y > h0[6].y && h0[12].y > h0[10].y && h0[16].y > h0[14].y;
+                        const isFist = h0[8].y > h0[6].y && h0[12].y > h0[10].y;
                         const okDist = Math.hypot(h0[8].x - h0[4].x, h0[8].y - h0[4].y);
                         if (isFist) detected = 'sphere';
                         else if (okDist < 0.05 && h0[12].y < h0[10].y) detected = 'saturn';
                     } else if (lms.length === 2) {
                         const h1 = lms[1];
-                        const open0 = h0[8].y < h0[6].y && h0[12].y < h0[10].y;
-                        const open1 = h1[8].y < h1[6].y && h1[12].y < h1[10].y;
                         const hDist = Math.hypot(h0[4].x - h1[4].x, h0[4].y - h1[4].y);
+                        const open0 = h0[8].y < h0[6].y;
+                        const open1 = h1[8].y < h1[6].y;
                         if (hDist < 0.08) detected = 'heart';
                         else if (open0 && open1) detected = 'cat';
                     }
                 } else {
-                    fingerPos.set(-100, -100, 0); // 手不在画面时移走干扰点
+                    fingerPos.set(-100, -100, 0);
                 }
 
-                // 进度条与切换逻辑
-                const bar = document.getElementById('progress-bar');
-                if (detected && detected !== currentShape) {
-                    if (detected === lastDetectedGesture) {
-                        const elapsed = Date.now() - gestureStartTime;
-                        bar.style.width = Math.min(100, (elapsed / HOLD_TIME * 100)) + "%";
-                        if (elapsed > HOLD_TIME) { transitionTo(detected); gestureStartTime = 0; }
-                    } else { lastDetectedGesture = detected; gestureStartTime = Date.now(); }
-                } else {
-                    lastDetectedGesture = null;
-                    gestureStartTime = 0;
-                    bar.style.width = "0%";
-                }
-
-                let displayShapeName = currentShape === 'cat' ? 'PINK PIG' : currentShape.toUpperCase();
-                let displayDetectedName = detected ? (detected === 'cat' ? 'PINK PIG' : detected.toUpperCase()) : '';
-                document.getElementById('status').innerText = detected ? `锁定中: ${displayDetectedName}` : `形态: ${displayShapeName}`;
+                updateProgress(detected);
             });
 
-            new Camera(video, { onFrame: async () => await hands.send({ image: video }), width: 640, height: 480 }).start();
+            const cam = new Camera(video, {
+                onFrame: async () => await hands.send({ image: video }),
+                width: isMobile ? 480 : 640,
+                height: isMobile ? 360 : 480,
+                facingMode: 'user'
+            });
+            cam.start();
+        }
+
+        function updateProgress(detected) {
+            const bar = document.getElementById('progress-bar');
+            if (detected && detected !== currentShape) {
+                if (detected === lastDetectedGesture) {
+                    const elapsed = Date.now() - gestureStartTime;
+                    bar.style.width = Math.min(100, (elapsed / HOLD_TIME * 100)) + "%";
+                    if (elapsed > HOLD_TIME) { transitionTo(detected); gestureStartTime = 0; }
+                } else { lastDetectedGesture = detected; gestureStartTime = Date.now(); }
+            } else {
+                lastDetectedGesture = null;
+                gestureStartTime = 0;
+                bar.style.width = "0%";
+            }
+
+            let nameMap = { 'sphere': '能量球', 'cat': '粉红猪', 'saturn': '土星环', 'heart': '爱心' };
+            let dispName = nameMap[currentShape] || '';
+            let lockName = detected ? nameMap[detected] : '';
+            document.getElementById('status').innerText = detected ? `锁定中: ${lockName}` : `形态: ${dispName}`;
         }
 
         function transitionTo(type, instant = false) {
             currentShape = type;
+
+            // 3. 修改：设置动画时间
+            // 球体 = 2秒, 其他 = 1秒
+            const isSphere = (type === 'sphere');
+            const animDuration = instant ? 0 : (isSphere ? 2.0 : 0.8);
+
+            // 同时调整物理 Lerp 速度，让粒子移动慢一点
+            lerpSpeed = isSphere ? 0.04 : 0.15;
+
+            // 切换时不播放声音，仅做视觉变换
             const colors = themes[type];
             const colAttr = particles.geometry.attributes.color;
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const c = new THREE.Color(colors[i % colors.length]);
                 gsap.to(colAttr.array, {
                     [i * 3]: c.r, [i * 3 + 1]: c.g, [i * 3 + 2]: c.b,
-                    duration: instant ? 0 : 0.8,
+                    duration: animDuration,
                     onUpdate: () => colAttr.needsUpdate = true
                 });
             }
@@ -333,30 +450,39 @@
             const beat = (currentShape === 'heart') ? (1 + Math.pow(Math.sin(t * 2.5), 10) * 0.2) : 1;
             const scale = baseScale * beat;
 
+            let particleDisturbed = false; // 检测是否有粒子被干扰
+
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const idx = i * 3;
 
-                // 1. 基础形状趋向力
                 let tx = target[idx] * scale;
                 let ty = target[idx + 1] * scale;
                 let tz = target[idx + 2] * scale;
 
-                // 2. 交互排斥力计算
                 const dx = posArr[idx] - fingerPos.x;
                 const dy = posArr[idx + 1] - fingerPos.y;
                 const dz = posArr[idx + 2] - fingerPos.z;
                 const distSq = dx * dx + dy * dy + dz * dz;
 
-                if (distSq < 15) { // 排斥半径
-                    const force = (15 - distSq) * 0.06;
-                    tx += (dx / Math.sqrt(distSq + 0.1)) * force * 12;
-                    ty += (dy / Math.sqrt(distSq + 0.1)) * force * 12;
+                // 交互排斥
+                if (distSq < 12) {
+                    const force = (12 - distSq) * 0.06;
+                    tx += (dx / Math.sqrt(distSq + 0.1)) * force * 15;
+                    ty += (dy / Math.sqrt(distSq + 0.1)) * force * 15;
+
+                    // 如果手指真的很靠近粒子，且产生了位移，标记为干扰
+                    if (distSq < 5) particleDisturbed = true;
                 }
 
-                // 3. 应用平滑插值位移
-                posArr[idx] += (tx - posArr[idx]) * 0.15;
-                posArr[idx + 1] += (ty - posArr[idx + 1]) * 0.15;
-                posArr[idx + 2] += (tz - posArr[idx + 2]) * 0.15;
+                // 4. 修改：使用 lerpSpeed 代替固定的 0.15
+                posArr[idx] += (tx - posArr[idx]) * lerpSpeed;
+                posArr[idx + 1] += (ty - posArr[idx + 1]) * lerpSpeed;
+                posArr[idx + 2] += (tz - posArr[idx + 2]) * lerpSpeed;
+            }
+
+            // 如果粒子被强烈干扰，随机触发脆响
+            if (particleDisturbed && Math.random() > 0.8) {
+                SoundFX.playSparkle();
             }
 
             if (currentShape === 'saturn') particles.rotation.y += 0.006;
@@ -372,8 +498,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             composer.setSize(window.innerWidth, window.innerHeight);
         }
-
-        window.onload = init;
     </script>
 </body>
 
