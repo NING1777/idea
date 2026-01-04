@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AS IF MEETING</title>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
     <style>
         :root {
@@ -146,14 +146,16 @@
             display: flex;
             gap: 20px;
             font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.6);
+            color: rgba(255, 255, 255, 0.7);
             font-family: sans-serif;
             letter-spacing: 1px;
-            padding: 8px 10px;
+            padding: 8px 15px;
             z-index: 3;
             opacity: 0;
             animation: fadeIn 2s ease-out 1s forwards;
-            pointer-events: none;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 20px;
+            backdrop-filter: blur(4px);
         }
 
         .stat-item {
@@ -606,49 +608,23 @@
         }
 
         @keyframes breathe {
-
-            0%,
-            100% {
-                opacity: 0.6;
-            }
-
-            50% {
-                opacity: 1;
-            }
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
         }
 
         @keyframes floatUp {
-            from {
-                opacity: 0;
-                transform: translateY(40px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes popIn {
-            from {
-                opacity: 0;
-                transform: scale(0.95);
-            }
-
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
         }
 
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-
-            to {
-                opacity: 1;
-            }
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
     </style>
 </head>
@@ -678,6 +654,13 @@
             <div class="stat-item">
                 <span>共鸣灵魂</span>
                 <span class="stat-num" id="busuanzi_value_site_uv">...</span>
+            </div>
+            
+            <div style="width:1px; height:12px; background:rgba(255,255,255,0.4);"></div>
+            
+            <div class="stat-item">
+                <span>累计交互</span>
+                <span class="stat-num" id="usage_count_display">...</span>
             </div>
         </div>
     </div>
@@ -731,6 +714,42 @@
         let config = { mode: '', pet: {} };
         let history = [];
 
+        /* ================= 统计功能 API ================= */
+        // 使用免费的 CountAPI 记录“交互次数”
+        // 注意：Namespace 'as-if-meeting-demo' 是公开的，建议修改为您独有的名字以防和其他人冲突
+        const COUNT_NAMESPACE = 'as-if-meeting-demo-v1'; 
+        const COUNT_KEY = 'interactions';
+
+        // 初始化加载次数
+        function initUsageCounter() {
+            const display = document.getElementById('usage_count_display');
+            if(!display) return;
+            
+            fetch(`https://api.countapi.xyz/get/${COUNT_NAMESPACE}/${COUNT_KEY}`)
+                .then(res => res.json())
+                .then(data => {
+                    display.innerText = data.value || 0;
+                })
+                .catch(() => {
+                    // 如果 key 不存在，尝试创建并初始化
+                    fetch(`https://api.countapi.xyz/create?namespace=${COUNT_NAMESPACE}&key=${COUNT_KEY}&value=0`)
+                        .then(res => res.json())
+                        .then(data => display.innerText = data.value)
+                        .catch(err => display.innerText = "-");
+                });
+        }
+
+        // 交互时增加次数
+        function updateUsageCounter() {
+            fetch(`https://api.countapi.xyz/hit/${COUNT_NAMESPACE}/${COUNT_KEY}`)
+                .then(res => res.json())
+                .then(data => {
+                    console.log("Usage recorded:", data.value);
+                })
+                .catch(err => console.error("Count API Error", err));
+        }
+
+
         /* ================= 数据层 ================= */
         const wallpaperIds = [
             "1490730141103-6c8f7db0e308", "1507525428034-b723cf961d3e",
@@ -776,6 +795,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 generateLocalSouls();
+                initUsageCounter(); // 加载使用计数
             } catch (e) {
                 console.error("生成失败", e);
                 document.getElementById('galleryContainer').innerHTML = '加载中...';
@@ -1001,6 +1021,9 @@
             const input = document.getElementById('mainInput');
             const text = input.value.trim();
             if (!text) return;
+
+            // 触发计数器更新
+            updateUsageCounter();
 
             if (config.mode === 'chat') addUserBubble(text);
             input.value = '';
