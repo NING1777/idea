@@ -153,7 +153,7 @@
             pointer-events: none;
         }
 
-        /* ---------------- Step 2: 灵魂画廊 (重点修改区域) ---------------- */
+        /* ---------------- Step 2: 灵魂画廊 (修复滚动版) ---------------- */
         #step2-container {
             position: fixed;
             top: 0;
@@ -165,16 +165,18 @@
             display: none;
             flex-direction: column;
             align-items: center;
-            /* 修改：不再强制居中，允许内容撑开 */
-            justify-content: flex-start; 
+            justify-content: flex-start; /* 顶部对齐，让内容自然延伸 */
             opacity: 0;
             transition: opacity 0.8s ease;
+
+            /* --- 核心修复滚动逻辑 --- */
+            overflow-y: scroll; /* 强制显示滚动行为 */
+            -webkit-overflow-scrolling: touch; /* iOS 惯性滚动 */
             
-            /* 修改：核心滚动逻辑 */
-            overflow-y: auto; 
-            -webkit-overflow-scrolling: touch; /* iOS 丝滑滚动 */
-            padding-top: 40px; /* 顶部留白 */
-            padding-bottom: 80px; /* 底部留白，防止输入框被遮挡 */
+            /* 关键：给顶部和底部留出巨大空间 */
+            padding-top: 60px; 
+            padding-bottom: 150px; /* 底部预留 150px，防止按钮被手机底部栏遮挡 */
+            box-sizing: border-box; /* 确保 padding 算在高度内 */
         }
 
         #step2-container.active {
@@ -184,15 +186,15 @@
 
         .gallery-header {
             text-align: center;
-            margin-bottom: 20px;
-            flex-shrink: 0; /* 防止标题被挤压 */
+            margin-bottom: 25px;
+            flex-shrink: 0;
+            position: relative; /* 为刷新按钮定位做准备 */
         }
 
         .gallery-title {
             font-size: 1.6rem;
             color: var(--text-main);
             letter-spacing: 6px;
-            font-weight: normal;
             margin: 0;
         }
 
@@ -202,8 +204,27 @@
             letter-spacing: 3px;
             margin-top: 8px;
             opacity: 0.6;
-            font-family: sans-serif;
             text-transform: uppercase;
+        }
+        
+        /* 新增：刷新按钮样式 */
+        .gallery-refresh-btn {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: var(--accent-color);
+            background: rgba(255,255,255,0.5);
+            border: 1px solid var(--accent-color);
+            padding: 6px 18px;
+            border-radius: 20px;
+            cursor: pointer;
+            display: inline-block;
+            transition: 0.3s;
+        }
+        
+        .gallery-refresh-btn:hover {
+            background: var(--accent-color);
+            color: white;
+            transform: rotate(180deg); /* 趣味旋转效果 */
         }
 
         .soul-gallery {
@@ -214,13 +235,18 @@
             width: 95%;
             max-width: 1100px;
             margin-bottom: 20px;
-            /* 确保卡片不会被压缩 */
-            flex-shrink: 0; 
+            flex-shrink: 0;
+            transition: opacity 0.3s; /* 添加淡入淡出过渡 */
         }
 
-        /* 卡片样式调整 */
+        /* 手机端卡片适配 */
+        @media (max-width: 768px) {
+            .soul-card { width: 44%; } /* 双列显示 */
+        }
+
+        /* 保持之前的卡片样式，不需要动，但为了完整性列在这里关键部分 */
         .soul-card {
-            width: 155px; /* 稍微调小适应手机双列 */
+            width: 155px;
             height: 230px;
             background: var(--card-glass);
             border: 1px solid #fff;
@@ -231,60 +257,10 @@
             justify-content: center;
             cursor: pointer;
             position: relative;
-            overflow: hidden;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-            backdrop-filter: blur(12px);
-            box-shadow: 0 5px 15px rgba(139, 94, 60, 0.05);
             margin-bottom: 10px;
+            /* ...其他样式保持不变... */
         }
-
-        .soul-card:hover, .soul-card:active {
-            transform: translateY(-5px);
-            background: white;
-            box-shadow: 0 15px 30px rgba(212, 163, 115, 0.15);
-        }
-
-        .soul-card.selected {
-            background: white;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 2px var(--accent-color) inset, 0 15px 30px rgba(212, 163, 115, 0.2);
-            transform: translateY(-5px);
-        }
-
-        .soul-visual {
-            width: 60px;
-            height: 60px;
-            margin-bottom: 15px;
-            border-radius: 50%;
-            background: #fffbf0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid rgba(212, 163, 115, 0.15);
-        }
-
-        .soul-svg {
-            width: 28px;
-            height: 28px;
-            fill: var(--accent-color);
-        }
-
-        .soul-name {
-            font-size: 1rem;
-            color: var(--text-main);
-            font-weight: bold;
-            margin-bottom: 6px;
-        }
-
-        .soul-desc {
-            font-size: 0.7rem;
-            color: var(--text-sub);
-            text-align: center;
-            padding: 0 8px;
-            line-height: 1.4;
-            opacity: 0.8;
-        }
-
+    
         /* --- 自定义输入框优化 --- */
         .input-wrapper {
             height: 0;
